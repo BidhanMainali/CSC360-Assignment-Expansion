@@ -52,6 +52,18 @@ typedef struct {
     VdbHeader  hdr;
 } Vdb;
 
+/* In-memory representation of an entire store: the header plus the vectors
+   (count * dim floats, stored contiguously row-major) and their text
+   payloads. The commands that modify a store follow a load -> modify ->
+   write cycle over this structure. */
+typedef struct {
+    VdbHeader hdr;
+    float    *vectors;   /* count * dim floats, row-major        */
+    char    **payloads;  /* count NUL-terminated strings          */
+    uint32_t  count;     /* number of records in use              */
+    uint32_t  cap;       /* allocated capacity, in records        */
+} VdbData;
+
 /* Create a new, empty store at `path` with the given dimension and hash
    seed. Returns 0 on success, -1 on failure (message written to stderr). */
 int vdb_create(const char *path, uint32_t dim, uint32_t hash_seed);
@@ -66,5 +78,17 @@ void vdb_close(Vdb *db);
 
 /* Print a human-readable summary of the store to `out`. */
 void vdb_print_stats(const Vdb *db, FILE *out);
+
+/* Initialize an empty in-memory dataset with the given dimension and hash
+   seed. */
+void vdb_data_init(VdbData *data, uint32_t dim, uint32_t hash_seed);
+
+/* Append one record -- a `dim`-length vector and its text -- to the dataset,
+   growing storage as needed. The vector is copied. Returns 0 on success,
+   -1 on allocation failure. */
+int vdb_data_add(VdbData *data, const float *vec, const char *text);
+
+/* Release all memory held by a dataset. Safe to call on a zeroed VdbData. */
+void vdb_data_free(VdbData *data);
 
 #endif /* VECDB_STORE_H */

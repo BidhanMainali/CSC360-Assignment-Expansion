@@ -206,3 +206,68 @@ void vdb_print_stats(const Vdb *db, FILE *out) {
         fprintf(out, "File size:    %ld bytes\n", size);
     }
 }
+
+void vdb_data_init(VdbData *data, uint32_t dim, uint32_t hash_seed) {
+    memset(data, 0, sizeof(*data));
+    data->hdr.version    = VDB_VERSION;
+    data->hdr.dim        = dim;
+    data->hdr.count      = 0;
+    data->hdr.hash_seed  = hash_seed;
+    data->hdr.metric     = VDB_METRIC_COSINE;
+    data->hdr.index_type = VDB_INDEX_FLAT;
+}
+
+int vdb_data_add(VdbData *data, const float *vec, const char *text) {
+    uint32_t dim = data->hdr.dim;
+    char    *copy;
+
+    /* Grow the parallel arrays when full. The vector pointer is committed
+       before growing the payload array so the struct is never left holding
+       a freed pointer if the second reallocation fails. */
+    if (data->count == data->cap) {
+        uint32_t newcap = (data->cap == 0) ? 16 : data->cap * 2;
+        float   *nv;
+        char   **np;
+
+        nv = realloc(data->vectors, (size_t)newcap * dim * sizeof(float));
+        if (nv == NULL) {
+            return -1;
+        }
+        data->vectors = nv;
+
+        np = realloc(data->payloads, (size_t)newcap * sizeof(char *));
+        if (np == NULL) {
+            return -1;
+        }
+        data->payloads = np;
+
+        data->cap = newcap;
+    }
+
+    copy = strdup(text);
+    if (copy == NULL) {
+        return -1;
+    }
+
+    memcpy(data->vectors + (size_t)data->count * dim, vec,
+           (size_t)dim * sizeof(float));
+    data->payloads[data->count] = copy;
+    data->count++;
+    data->hdr.count = data->count;
+
+    return 0;
+}
+
+void vdb_data_free(VdbData *data) {
+    uint32_t i;
+
+    if (data == NULL) {
+        return;
+    }
+    for (i = 0; i < data->count; i++) {
+        free(data->payloads[i]);
+    }
+    free(data->payloads);
+    free(data->vectors);
+    memset(data, 0, sizeof(*data));
+}
