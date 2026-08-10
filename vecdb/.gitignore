@@ -1,0 +1,11 @@
+# Build artifacts
+/vecdb
+*.o
+
+# Database images produced by the tool
+*.vdb
+
+# Editor swap files
+*.swp
+*.swo
+*~
