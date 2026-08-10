@@ -1,5 +1,6 @@
 #include "store.h"
 #include "embed.h"
+#include "index.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -180,6 +181,12 @@ static int cmd_add(int argc, char **argv) {
     }
     free(vec);
 
+    if (vdb_build_index(&data) != 0) {
+        fprintf(stderr, "vecdb add: out of memory building index\n");
+        vdb_data_free(&data);
+        return 1;
+    }
+
     if (vdb_write(path, &data) != 0) {
         vdb_data_free(&data);
         return 1;
@@ -244,7 +251,7 @@ static int cmd_search(int argc, char **argv) {
         return 1;
     }
 
-    embed_tf(query, qv, dim, data.hdr.hash_seed);
+    embed_tfidf(query, qv, dim, data.hdr.hash_seed, data.idf);
 
     /* Score every vector; keep the best k in a small array sorted by
        descending score (hits[0] is the best, hits[nhits-1] the weakest kept). */
@@ -419,6 +426,12 @@ static int cmd_addfile(int argc, char **argv) {
         printf("No paragraphs found in '%s'.\n", textfile);
         vdb_data_free(&data);
         return 0;
+    }
+
+    if (vdb_build_index(&data) != 0) {
+        fprintf(stderr, "vecdb addfile: out of memory building index\n");
+        vdb_data_free(&data);
+        return 1;
     }
 
     if (vdb_write(path, &data) != 0) {
