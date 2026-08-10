@@ -18,6 +18,7 @@ static void usage(FILE *out, const char *prog) {
         "  stats  <file.vdb>         print information about a store\n"
         "  open   <file.vdb>         check that a store opens and is valid\n"
         "  embed  \"<text>\" [dim]      embed text and print a vector summary\n"
+        "  add    <file.vdb> \"<text>\" embed text and add it to a store\n"
         "  help                      show this message\n"
         "  version                   show the version\n",
         prog, VDB_DEFAULT_DIM);
@@ -141,6 +142,52 @@ static int cmd_embed(int argc, char **argv) {
     return 0;
 }
 
+static int cmd_add(int argc, char **argv) {
+    VdbData     data;
+    const char *path;
+    const char *text;
+    float      *vec;
+    uint32_t    dim;
+
+    if (argc < 2) {
+        fprintf(stderr, "vecdb add: usage: add <file.vdb> \"<text>\"\n");
+        return 1;
+    }
+    path = argv[0];
+    text = argv[1];
+
+    if (vdb_load(path, &data) != 0) {
+        return 1;   /* vdb_load already reported the reason */
+    }
+
+    dim = data.hdr.dim;
+    vec = malloc((size_t)dim * sizeof(float));
+    if (vec == NULL) {
+        fprintf(stderr, "vecdb add: out of memory\n");
+        vdb_data_free(&data);
+        return 1;
+    }
+
+    embed_tf(text, vec, dim, data.hdr.hash_seed);
+
+    if (vdb_data_add(&data, vec, text) != 0) {
+        fprintf(stderr, "vecdb add: out of memory\n");
+        free(vec);
+        vdb_data_free(&data);
+        return 1;
+    }
+    free(vec);
+
+    if (vdb_write(path, &data) != 0) {
+        vdb_data_free(&data);
+        return 1;
+    }
+
+    printf("Added to '%s' (now %u vectors)\n", path, data.count);
+    vdb_data_free(&data);
+    return 0;
+}
+
 int main(int argc, char **argv) {
     const char *cmd;
 
@@ -162,6 +209,9 @@ int main(int argc, char **argv) {
     }
     if (strcmp(cmd, "embed") == 0) {
         return cmd_embed(argc - 2, argv + 2);
+    }
+    if (strcmp(cmd, "add") == 0) {
+        return cmd_add(argc - 2, argv + 2);
     }
     if (strcmp(cmd, "help") == 0) {
         usage(stdout, argv[0]);
