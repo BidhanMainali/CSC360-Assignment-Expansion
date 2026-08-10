@@ -51,6 +51,11 @@ int repl_run(const char *path) {
             break;
         } else if (strcmp(cmd, "help") == 0) {
             print_help();
+        } else if (strcmp(cmd, "stats") == 0) {
+            printf("Store:      %s\n", path);
+            printf("Vectors:    %u\n", data.count);
+            printf("Dimension:  %u\n", data.hdr.dim);
+            printf("IDF:        %s\n", data.idf != NULL ? "built" : "none");
         } else {
             printf("Unknown command. Type 'help'.\n");
         }
