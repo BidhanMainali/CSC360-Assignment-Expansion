@@ -21,4 +21,9 @@ uint16_t get_be16(const uint8_t *p);
 uint32_t get_be32(const uint8_t *p);
 uint64_t get_be64(const uint8_t *p);
 
+/* Seeded 32-bit FNV-1a hash. The embedder uses this to map a token to a
+   bucket in the embedding vector (the "hashing trick"); the seed comes
+   from the store header so a file's vectors are reproducible. */
+uint32_t fnv1a(const void *data, size_t len, uint32_t seed);
+
 #endif /* VECDB_UTIL_H */

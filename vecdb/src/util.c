@@ -71,3 +71,16 @@ uint64_t get_be64(const uint8_t *p) {
            ((uint64_t)p[4] << 24) | ((uint64_t)p[5] << 16) |
            ((uint64_t)p[6] << 8)  | ((uint64_t)p[7]);
 }
+
+uint32_t fnv1a(const void *data, size_t len, uint32_t seed) {
+    const uint8_t *p = (const uint8_t *)data;
+    uint32_t       h = 2166136261u ^ seed;  /* FNV offset basis, seeded */
+    size_t         i;
+
+    for (i = 0; i < len; i++) {
+        h ^= p[i];
+        h *= 16777619u;                      /* FNV prime */
+    }
+
+    return h;
+}
