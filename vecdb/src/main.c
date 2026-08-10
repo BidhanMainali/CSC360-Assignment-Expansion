@@ -1,6 +1,7 @@
 #include "store.h"
 #include "embed.h"
 #include "index.h"
+#include "repl.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -22,6 +23,7 @@ static void usage(FILE *out, const char *prog) {
         "  add    <file.vdb> \"<text>\" embed text and add it to a store\n"
         "  search <file.vdb> \"<q>\" [k] find the k most similar entries\n"
         "  addfile <file.vdb> <text> add each paragraph of a text file\n"
+        "  repl   <file.vdb>         open an interactive session\n"
         "  help                      show this message\n"
         "  version                   show the version\n",
         prog, VDB_DEFAULT_DIM);
@@ -475,6 +477,13 @@ int main(int argc, char **argv) {
     }
     if (strcmp(cmd, "addfile") == 0) {
         return cmd_addfile(argc - 2, argv + 2);
+    }
+    if (strcmp(cmd, "repl") == 0) {
+        if (argc < 3) {
+            fprintf(stderr, "vecdb repl: usage: repl <file.vdb>\n");
+            return 1;
+        }
+        return repl_run(argv[2]);
     }
     if (strcmp(cmd, "help") == 0) {
         usage(stdout, argv[0]);

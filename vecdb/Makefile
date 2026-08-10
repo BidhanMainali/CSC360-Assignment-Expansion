@@ -1,6 +1,6 @@
 CC      = gcc
 CFLAGS  = -std=c11 -D_DEFAULT_SOURCE -Wall -Wextra -O2 -g
-LDFLAGS = -pthread -lm
+LDFLAGS = -pthread -lm -lreadline -lhistory -ltermcap
 SRC     = $(wildcard src/*.c)
 OBJ     = $(SRC:.c=.o)
 BIN     = vecdb
