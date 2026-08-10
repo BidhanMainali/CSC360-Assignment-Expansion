@@ -20,6 +20,7 @@ static void usage(FILE *out, const char *prog) {
         "  embed  \"<text>\" [dim]      embed text and print a vector summary\n"
         "  add    <file.vdb> \"<text>\" embed text and add it to a store\n"
         "  search <file.vdb> \"<q>\" [k] find the k most similar entries\n"
+        "  addfile <file.vdb> <text> add each paragraph of a text file\n"
         "  help                      show this message\n"
         "  version                   show the version\n",
         prog, VDB_DEFAULT_DIM);
@@ -286,6 +287,151 @@ static int cmd_search(int argc, char **argv) {
     return 0;
 }
 
+/* Split `text` into paragraphs (runs of text separated by blank lines),
+   embed each one, and append it to `data`. `text` is modified in place.
+   Returns 0 on success, -1 on allocation failure; *added_out gets the number
+   of paragraphs ingested. */
+static int ingest_text(VdbData *data, char *text, uint32_t *added_out) {
+    uint32_t dim   = data->hdr.dim;
+    uint32_t added = 0;
+    float   *vec   = malloc((size_t)dim * sizeof(float));
+    char    *p     = text;
+    int      rc    = 0;
+
+    if (vec == NULL) {
+        return -1;
+    }
+
+    while (*p != '\0') {
+        char *para;
+        char *q;
+
+        /* Skip a run of blank lines and leading whitespace. */
+        while (*p == '\n' || *p == '\r' || *p == ' ' || *p == '\t') {
+            p++;
+        }
+        if (*p == '\0') {
+            break;
+        }
+
+        para = p;
+
+        /* Advance to the end of this paragraph: a blank line (a newline
+           followed, after optional whitespace, by another newline) or EOF. */
+        while (*p != '\0') {
+            if (*p == '\n') {
+                char *look = p + 1;
+
+                while (*look == '\r' || *look == ' ' || *look == '\t') {
+                    look++;
+                }
+                if (*look == '\n' || *look == '\0') {
+                    break;
+                }
+            }
+            p++;
+        }
+
+        if (*p != '\0') {
+            *p = '\0';
+            p++;
+        }
+
+        /* Fold the paragraph's internal newlines into spaces so it stores
+           and prints as a single line. */
+        for (q = para; *q != '\0'; q++) {
+            if (*q == '\n' || *q == '\r') {
+                *q = ' ';
+            }
+        }
+
+        embed_tf(para, vec, dim, data->hdr.hash_seed);
+        if (vdb_data_add(data, vec, para) != 0) {
+            rc = -1;
+            break;
+        }
+        added++;
+    }
+
+    free(vec);
+    *added_out = added;
+    return rc;
+}
+
+static int cmd_addfile(int argc, char **argv) {
+    VdbData     data;
+    const char *path;
+    const char *textfile;
+    char       *text;
+    FILE       *f;
+    long        len;
+    uint32_t    added = 0;
+
+    if (argc < 2) {
+        fprintf(stderr, "vecdb addfile: usage: addfile <file.vdb> <textfile>\n");
+        return 1;
+    }
+    path     = argv[0];
+    textfile = argv[1];
+
+    /* Read the whole text file into memory. */
+    f = fopen(textfile, "rb");
+    if (f == NULL) {
+        fprintf(stderr, "vecdb addfile: cannot open '%s'\n", textfile);
+        return 1;
+    }
+    if (fseek(f, 0, SEEK_END) != 0 || (len = ftell(f)) < 0) {
+        fprintf(stderr, "vecdb addfile: cannot size '%s'\n", textfile);
+        fclose(f);
+        return 1;
+    }
+    rewind(f);
+
+    text = malloc((size_t)len + 1);
+    if (text == NULL) {
+        fprintf(stderr, "vecdb addfile: out of memory\n");
+        fclose(f);
+        return 1;
+    }
+    if (fread(text, 1, (size_t)len, f) != (size_t)len) {
+        fprintf(stderr, "vecdb addfile: failed to read '%s'\n", textfile);
+        free(text);
+        fclose(f);
+        return 1;
+    }
+    text[len] = '\0';
+    fclose(f);
+
+    if (vdb_load(path, &data) != 0) {
+        free(text);
+        return 1;
+    }
+
+    if (ingest_text(&data, text, &added) != 0) {
+        fprintf(stderr, "vecdb addfile: out of memory while ingesting\n");
+        free(text);
+        vdb_data_free(&data);
+        return 1;
+    }
+    free(text);
+
+    if (added == 0) {
+        printf("No paragraphs found in '%s'.\n", textfile);
+        vdb_data_free(&data);
+        return 0;
+    }
+
+    if (vdb_write(path, &data) != 0) {
+        vdb_data_free(&data);
+        return 1;
+    }
+
+    printf("Added %u paragraph(s) from '%s' to '%s' (now %u vectors)\n",
+           added, textfile, path, data.count);
+    vdb_data_free(&data);
+    return 0;
+}
+
 int main(int argc, char **argv) {
     const char *cmd;
 
@@ -313,6 +459,9 @@ int main(int argc, char **argv) {
     }
     if (strcmp(cmd, "search") == 0) {
         return cmd_search(argc - 2, argv + 2);
+    }
+    if (strcmp(cmd, "addfile") == 0) {
+        return cmd_addfile(argc - 2, argv + 2);
     }
     if (strcmp(cmd, "help") == 0) {
         usage(stdout, argv[0]);
