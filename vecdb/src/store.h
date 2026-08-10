@@ -91,4 +91,11 @@ int vdb_data_add(VdbData *data, const float *vec, const char *text);
 /* Release all memory held by a dataset. Safe to call on a zeroed VdbData. */
 void vdb_data_free(VdbData *data);
 
+/* Write an entire dataset to `path`, replacing any existing file: the
+   512-byte header, a contiguous block of raw float32 vectors, then each
+   payload as a big-endian length followed by its bytes. Updates the header's
+   region fields to match what was written. Returns 0 on success, -1 on
+   failure. */
+int vdb_write(const char *path, VdbData *data);
+
 #endif /* VECDB_STORE_H */

@@ -271,3 +271,73 @@ void vdb_data_free(VdbData *data) {
     free(data->vectors);
     memset(data, 0, sizeof(*data));
 }
+
+int vdb_write(const char *path, VdbData *data) {
+    FILE    *fp;
+    uint8_t  hdrbuf[VDB_HEADER_SIZE];
+    uint32_t dim = data->hdr.dim;
+    uint64_t vectors_size = (uint64_t)data->count * dim * sizeof(float);
+    uint64_t payload_size = 0;
+    uint32_t i;
+
+    for (i = 0; i < data->count; i++) {
+        payload_size += 4u + (uint64_t)strlen(data->payloads[i]);
+    }
+
+    /* Record the layout in the header before serializing it. */
+    data->hdr.count        = data->count;
+    data->hdr.vectors_off  = VDB_HEADER_SIZE;
+    data->hdr.vectors_size = vectors_size;
+    data->hdr.payload_off  = VDB_HEADER_SIZE + vectors_size;
+    data->hdr.payload_size = payload_size;
+    data->hdr.idmap_off    = 0;
+    data->hdr.idmap_size   = 0;
+    data->hdr.idf_off      = 0;
+    data->hdr.idf_size     = 0;
+
+    fp = fopen(path, "wb");
+    if (fp == NULL) {
+        fprintf(stderr, "vecdb: cannot write '%s'\n", path);
+        return -1;
+    }
+
+    encode_header(&data->hdr, hdrbuf);
+    if (fwrite(hdrbuf, 1, VDB_HEADER_SIZE, fp) != VDB_HEADER_SIZE) {
+        fprintf(stderr, "vecdb: failed to write header to '%s'\n", path);
+        fclose(fp);
+        return -1;
+    }
+
+    /* Vectors: one contiguous block of raw float32 in host byte order. */
+    if (vectors_size > 0) {
+        size_t nfloats = (size_t)data->count * dim;
+
+        if (fwrite(data->vectors, sizeof(float), nfloats, fp) != nfloats) {
+            fprintf(stderr, "vecdb: failed to write vectors to '%s'\n", path);
+            fclose(fp);
+            return -1;
+        }
+    }
+
+    /* Payloads: each is a big-endian length followed by its raw bytes. */
+    for (i = 0; i < data->count; i++) {
+        uint8_t lenbuf[4];
+        size_t  len = strlen(data->payloads[i]);
+
+        put_be32(lenbuf, (uint32_t)len);
+
+        if (fwrite(lenbuf, 1, 4, fp) != 4 ||
+            (len > 0 && fwrite(data->payloads[i], 1, len, fp) != len)) {
+            fprintf(stderr, "vecdb: failed to write payload to '%s'\n", path);
+            fclose(fp);
+            return -1;
+        }
+    }
+
+    if (fclose(fp) != 0) {
+        fprintf(stderr, "vecdb: failed to finalize '%s'\n", path);
+        return -1;
+    }
+
+    return 0;
+}
