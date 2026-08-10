@@ -14,12 +14,13 @@ systems).
 
 ## Status
 
-Under active development. Current milestone: **M0 — storage skeleton**.
+Current release: **v0.1.0** — a working single-threaded vector store.
 
 - [x] M0  on-disk `.vdb` format, `create` / `open` / `stats`
-- [ ] M1  hashed TF-IDF embedder
-- [ ] M2  single-threaded flat (exact) search
-- [ ] M3  persistence of vectors + payloads, `mmap`
+- [x] M1  hashed term-frequency embedder, `embed`
+- [x] M2  single-threaded flat (exact) search: `add`, `search`, `addfile`
+- [ ]     IDF weighting (TF -> TF-IDF)
+- [ ] M3  memory-mapped vector loads
 - [ ] M4  interactive REPL, background ingest, Ctrl-C
 - [ ] M5  multithreaded search + benchmarks
 
@@ -32,12 +33,15 @@ make
 Produces a single `vecdb` executable. `make clean` removes build artifacts.
 Developed and tested on Linux.
 
-## Usage (M0)
+## Usage
 
 ```
-./vecdb create store.vdb 1024   # create an empty store with dimension 1024
-./vecdb stats  store.vdb        # show information about the store
-./vecdb open   store.vdb        # verify the file is a valid store
+./vecdb create  store.vdb 1024          # create an empty store (dimension 1024)
+./vecdb add     store.vdb "some text"   # embed text and add it
+./vecdb addfile store.vdb notes.txt     # add each paragraph of a text file
+./vecdb search  store.vdb "a query" 5   # print the 5 most similar entries
+./vecdb stats   store.vdb               # show information about the store
+./vecdb embed   "some text" 16          # inspect the raw embedding vector
 ```
 
 You can inspect the raw file with a hex viewer:
@@ -49,15 +53,17 @@ xxd store.vdb | head
 ## On-disk format
 
 Every `.vdb` file begins with a fixed 512-byte header (a "superblock"),
-followed by regions for the vectors, the original text payloads, an id map,
-and the embedder's IDF weights. All integers are stored big-endian so the
-file is portable and easy to inspect. See `src/store.h` for the exact layout.
+followed by the vectors (a contiguous block of float32) and the original text
+payloads (each length-prefixed). The header reserves regions for an id map and
+IDF weights used by later versions. Integers are stored big-endian so the file
+is easy to inspect; see `src/store.h` for the exact layout.
 
 ## Layout
 
 ```
 src/
-  main.c    command-line entry point
-  store.c   on-disk .vdb format (header read/write, create/open/stats)
-  util.c    error helpers and big-endian serialization
+  main.c    command-line entry point and command dispatch
+  store.c   on-disk .vdb format and in-memory dataset (load/write/add)
+  embed.c   tokenizer and hashing term-frequency vectorizer
+  util.c    error helpers, big-endian serialization, FNV-1a hash
 ```
