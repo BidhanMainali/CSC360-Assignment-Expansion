@@ -20,4 +20,10 @@ void tokenize(const char *text, token_fn on_token, void *ctx);
    similarity. */
 void embed_tf(const char *text, float *out, uint32_t dim, uint32_t seed);
 
+/* Like embed_tf, but multiplies each bucket by the corresponding IDF weight
+   before normalizing (producing a TF-IDF vector). `idf` is an array of length
+   `dim`, or NULL to fall back to plain term frequency. */
+void embed_tfidf(const char *text, float *out, uint32_t dim, uint32_t seed,
+                 const float *idf);
+
 #endif /* VECDB_EMBED_H */

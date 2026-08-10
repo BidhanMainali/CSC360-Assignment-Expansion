@@ -54,7 +54,8 @@ static void tf_accumulate(const char *tok, size_t len, void *ctx) {
     c->vec[idx] += sign;
 }
 
-void embed_tf(const char *text, float *out, uint32_t dim, uint32_t seed) {
+void embed_tfidf(const char *text, float *out, uint32_t dim, uint32_t seed,
+                 const float *idf) {
     tf_ctx   c;
     uint32_t i;
     double   norm = 0.0;
@@ -68,6 +69,13 @@ void embed_tf(const char *text, float *out, uint32_t dim, uint32_t seed) {
     c.seed = seed;
     tokenize(text, tf_accumulate, &c);
 
+    /* Weight each bucket by its IDF, if provided (turning TF into TF-IDF). */
+    if (idf != NULL) {
+        for (i = 0; i < dim; i++) {
+            out[i] *= idf[i];
+        }
+    }
+
     /* L2-normalize so a dot product between two vectors equals their
        cosine similarity. */
     for (i = 0; i < dim; i++) {
@@ -80,4 +88,8 @@ void embed_tf(const char *text, float *out, uint32_t dim, uint32_t seed) {
             out[i] = (float)((double)out[i] / norm);
         }
     }
+}
+
+void embed_tf(const char *text, float *out, uint32_t dim, uint32_t seed) {
+    embed_tfidf(text, out, dim, seed, NULL);
 }
