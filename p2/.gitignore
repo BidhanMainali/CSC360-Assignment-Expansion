@@ -1,0 +1,8 @@
+cat > .gitignore << 'EOF'
+mts
+*.o
+output.txt
+EOF
+
+Check it:
+cat .gitignore

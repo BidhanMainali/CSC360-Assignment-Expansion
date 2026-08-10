@@ -1,0 +1,561 @@
+2026/06/03 16:44:17 [testMake] Testing Makefile exists and can compile ssi, 0.25
+2026/06/03 16:44:17 [COMMAND]: /usr/bin/make -C . clean
+2026/06/03 16:44:17 make: Entering directory '/home/bidhanmainali/CSC360/p1'
+rm -f ssi *.o
+make: Leaving directory '/home/bidhanmainali/CSC360/p1'
+2026/06/03 16:44:17 [COMMAND]: /usr/bin/make -C .
+2026/06/03 16:44:17 make: Entering directory '/home/bidhanmainali/CSC360/p1'
+gcc ssi.c -lreadline -lhistory -ltermcap -o ssi
+make: Leaving directory '/home/bidhanmainali/CSC360/p1'
+2026/06/03 16:44:17 ==== Test name: testMake, Mark received: 0.25 ====
+
+2026/06/03 16:44:18 [testREADME] Testing README file exists, 0.25
+2026/06/03 16:44:18 [testREADME] README content: 
+Reading through this assignmnet, the first thing I immedietly recognized is to parse our shell input.
+
+Before that, I need to get important user information such as the users current working directory.
+
+I did this by using getcwd(cwd,sizeof(cwd).  we store the working directory into a variable with a
+fixed size.
+
+One of the requriments was to get the hostname and login of the user. This was done via getlogin() and
+gethostname() built in by the C library.
+
+
+I combined login, hostname and the user shell prompt into 1 input vairable
+
+the snprintf builds a string from the login, hostname, and cwd to create "shell" representation
+
+example:  
+
+getlogin:   bidhanmainali
+hostname: linux202
+cwd:  /home/bidhanmainali/CSC360/p1
+
+prompt:  bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > 
+
+Next, the readline(prompt) will execute the stored prompt, wait for the user type something and press enter. On Enter, the the input that the user typed will be stored into a varaible for tokenizing.
+
+
+This leads to our first function: parse_input(input,args)
+
+This takes in our user-entred input and the args to store our tokens.
+
+We will tokenize each input and tokenize it to our args for later use. We loop until there is nomore to parse and before returning count, we make the last argument NULL so when we run execvp later on, it will not crash.
+
+
+if the user had entred "cd", change_directory() function will fire
+
+
+change_directory(args)
+
+Take in our args that we tokenized into arugments. We create a path variable to store and check for
+cases.
+
+If the first argument after cd is null (aka nothing), we just change their directory to its home
+via cd(getenv("HOME")). 
+
+
+If the input is "~", we also send them to the home directory the same way above.
+
+
+if the input has a '~' and some directory, we merge it with the home directory and execute.
+
+Finally, we have edge cases if the directory does not exit.
+
+
+
+
+Next, the most imporant part of the assignment is  if the user inputed "bg". We fire
+bg_execute(args)
+
+
+
+bg_execute(args)
+
+
+we take in our arguments. The first thing I did was for each  string, we put them into arguemnts
+for ease of access. This was done in the while loop.
+
+
+
+
+we create a pid vrabile and fork() to create a child proccess.
+
+signal() will let you do Cntrl- C to kill proccess if needed.
+
+
+execvp(args[1], args + 1) — runs the actual command. Uses args[1] not
+  args[0] because args[0] is "bg" which isn't the command. args + 1 shifts
+  the whole array forward by one, so the program sees the right arguments
+  	- If the command doesn't exist, print error and exit
+
+
+Parent (pid > 0):
+  This is the shell. It saves the job info:
+
+  1. malloc(sizeof(bg_job)) — create a new node in memory
+  2. new_job->pid = pid — save the child's PID so you can check on it later
+  3. strcpy(new_job->command, command) — save the command string
+     for printing in bglist and terminated
+  messages
+  4. new_job->next = bg_head — point this node to the current first node
+  5. bg_head = new_job — make this node the new first node
+
+  So the parent just records the job and immediately returns to the prompt,
+  while the child runs in the background.
+
+  
+
+
+next if the user types "bglist", fire bg_list()
+
+
+This function will loop through the created linked list and outputs the total # of background jobs
+that are currently running
+
+
+
+
+But, if the proccess is finished, it would just sit there in memory and create leaks. To counter this
+I created check_bg_jobs()
+
+
+
+This function will loop through the list and find any proccess that has finished and remove them from
+the linked list.
+This can be done utiizing the WNOHANG, it returns 0 if the proccess running and if it != 0, proccess is finished.
+
+the next couple of lines were simple linked list logic. If the procces is finished, I unlink them.
+
+
+
+
+
+Lastly, we free(input) to prevent memory leaks.
+
+For this assignment, i initally had all the logic above in 1 main which was very bad practice. 
+This took me a while to rearange everything and put them into functions to make my code clean! 
+
+2026/06/03 16:44:18 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.25]): 
+2026/06/03 16:44:29 Mark received: y
+2026/06/03 16:44:29 ==== Test name: testREADME, Mark received: 0.25 ====
+
+2026/06/03 16:44:30 [testExecSSI] Testing your ssi can be executed without additional parameter, shows the correct prompt, and exit on EOF, 0.50
+2026/06/03 16:44:30 [COMMAND]: /home/bidhanmainali/CSC360/p1/ssi
+2026/06/03 16:44:30 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > 
+2026/06/03 16:44:30 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.50]): 
+2026/06/03 16:44:32 Mark received: y
+2026/06/03 16:44:32 ==== Test name: testExecSSI, Mark received: 0.50 ====
+
+2026/06/03 16:44:33 [testExec] Testing exec commands without parameters, 1.00
+2026/06/03 16:44:33 [COMMAND]: /home/bidhanmainali/CSC360/p1/ssi
+2026/06/03 16:44:33 Sending command to SSI: ls  
+2026/06/03 16:44:33 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > ls  
+makefile
+marking-linux-amd64
+README.txt
+self-marking.log
+ssi
+ssi.c
+temp
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > 
+2026/06/03 16:44:33 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:44:33 Mark received: y
+2026/06/03 16:44:33 [COMMAND]: /home/bidhanmainali/CSC360/p1/ssi
+2026/06/03 16:44:33 Sending command to SSI: whoami  
+2026/06/03 16:44:33 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > whoami  
+bidhanmainali
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > 
+2026/06/03 16:44:33 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:44:34 Mark received: y
+2026/06/03 16:44:34 [COMMAND]: /home/bidhanmainali/CSC360/p1/ssi
+2026/06/03 16:44:34 Sending command to SSI: uname  
+2026/06/03 16:44:34 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > uname  
+Linux
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > 
+2026/06/03 16:44:34 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:44:35 Mark received: y
+2026/06/03 16:44:35 [COMMAND]: /home/bidhanmainali/CSC360/p1/ssi
+2026/06/03 16:44:35 Sending command to SSI: date  
+2026/06/03 16:44:35 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > date  
+Wed 03 Jun 2026 04:44:35 PM PDT
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > 
+2026/06/03 16:44:35 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:44:35 Mark received: y
+2026/06/03 16:44:35 [COMMAND]: /home/bidhanmainali/CSC360/p1/ssi
+2026/06/03 16:44:35 Sending command to SSI: hostname  
+2026/06/03 16:44:35 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > hostname  
+linux202
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > 
+2026/06/03 16:44:35 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:44:36 Mark received: y
+2026/06/03 16:44:36 ==== Test name: testExec, Mark received: 1.00 ====
+
+2026/06/03 16:44:37 [testExecWithParameters] Testing exec with parameters, 1.00
+2026/06/03 16:44:37 Sending command to SSI: 
+ls temp
+
+2026/06/03 16:44:37 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > ls temp
+A
+B
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > 
+2026/06/03 16:44:37 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:44:38 Mark received: y
+2026/06/03 16:44:38 Sending command to SSI: 
+ls -alh
+
+2026/06/03 16:44:38 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > ls -alh
+total 2.1M
+drwxrwxr-x 4 bidhanmainali bidhanmainali 4.0K Jun  3 16:44 .
+drwxrwxr-x 4 bidhanmainali bidhanmainali 4.0K Jun  3 16:01 ..
+drwxrwxr-x 8 bidhanmainali bidhanmainali 4.0K Jun  2 16:45 .git
+-rw-rw-r-- 1 bidhanmainali bidhanmainali   95 May 29 16:21 makefile
+-rwxrwxr-x 1 bidhanmainali bidhanmainali 2.0M Jun  3 16:43 marking-linux-amd64
+-rw-rw-r-- 1 bidhanmainali bidhanmainali 4.0K Jun  3 16:41 README.txt
+-rw-rw-r-- 1 bidhanmainali bidhanmainali  25K Jun  3 16:44 self-marking.log
+-rwxrwxr-x 1 bidhanmainali bidhanmainali  18K Jun  3 16:44 ssi
+-rw-rw-r-- 1 bidhanmainali bidhanmainali 4.6K Jun  3 15:59 ssi.c
+-rw-r--r-- 1 bidhanmainali bidhanmainali  16K Jun  2 15:42 .ssi.c.swo
+-rw-r--r-- 1 bidhanmainali bidhanmainali  16K Jun  3 16:03 .ssi.c.swp
+drwxr-xr-x 4 bidhanmainali bidhanmainali 4.0K Jun  3 16:44 temp
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > 
+2026/06/03 16:44:38 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:44:38 Mark received: y
+2026/06/03 16:44:38 Sending command to SSI: 
+ls temp/A/C
+
+2026/06/03 16:44:38 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > ls temp/A/C
+AC.txt
+D
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > 
+2026/06/03 16:44:38 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:44:39 Mark received: y
+2026/06/03 16:44:39 Sending command to SSI: 
+cat temp/A/C/AC.txt
+
+2026/06/03 16:44:39 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > cat temp/A/C/AC.txt
+This is the content for AC.txt
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > 
+2026/06/03 16:44:39 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:44:39 Mark received: y
+2026/06/03 16:44:39 Sending command to SSI: 
+echo hello
+
+2026/06/03 16:44:39 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > echo hello
+hello
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > 
+2026/06/03 16:44:39 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:44:40 Mark received: y
+2026/06/03 16:44:40 ==== Test name: testExecWithParameters, Mark received: 1.00 ====
+
+2026/06/03 16:44:41 [testNotExistCommand] Testing non-existent command, 1.00
+2026/06/03 16:44:41 Sending command to SSI: 
+nonexistent 
+
+
+2026/06/03 16:44:41 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > nonexistent 
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > 
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > 
+2026/06/03 16:44:41 nonexistent: No such file or directory
+
+2026/06/03 16:44:41 Do you want to award mark for this test? (y/n or input a floating number between [0, 1.00]): 
+2026/06/03 16:44:41 Mark received: y
+2026/06/03 16:44:41 ==== Test name: testNotExistCommand, Mark received: 1.00 ====
+
+2026/06/03 16:44:42 [testExecLongRunning] Testing exec with long running command, 1.00
+2026/06/03 16:44:42 [COMMAND]: ./ssi
+2026/06/03 16:44:42 Waiting 5 seconds before sending Ctrl-C signal
+2026/06/03 16:44:47 Sending interrupt signal Ctrl-C
+2026/06/03 16:44:47 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > ping -c 10 1.1.1.1
+PING 1.1.1.1 (1.1.1.1) 56(84) bytes of data.
+64 bytes from 1.1.1.1: icmp_seq=1 ttl=53 time=3.21 ms
+64 bytes from 1.1.1.1: icmp_seq=2 ttl=53 time=3.29 ms
+64 bytes from 1.1.1.1: icmp_seq=3 ttl=53 time=3.16 ms
+64 bytes from 1.1.1.1: icmp_seq=4 ttl=53 time=3.26 ms
+64 bytes from 1.1.1.1: icmp_seq=5 ttl=53 time=3.20 ms
+2026/06/03 16:44:47 64 bytes from 1.1.1.1: icmp_seq=6 ttl=53 time=3.18 ms
+2026/06/03 16:44:48 64 bytes from 1.1.1.1: icmp_seq=7 ttl=53 time=3.16 ms
+2026/06/03 16:44:49 64 bytes from 1.1.1.1: icmp_seq=8 ttl=53 time=3.26 ms
+2026/06/03 16:44:50 64 bytes from 1.1.1.1: icmp_seq=9 ttl=53 time=3.20 ms
+2026/06/03 16:44:51 64 bytes from 1.1.1.1: icmp_seq=10 ttl=53 time=3.21 ms
+
+--- 1.1.1.1 ping statistics ---
+10 packets transmitted, 10 received, 0% packet loss, time 9012ms
+rtt min/avg/max/mdev = 3.155/3.212/3.291/0.042 ms
+2026/06/03 16:44:51 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > 
+2026/06/03 16:44:51 Do you want to award mark for this test? (y/n or input a floating number between [0, 1.00]): 
+2026/06/03 16:44:53 Mark received: y
+2026/06/03 16:44:53 ==== Test name: testExecLongRunning, Mark received: 1.00 ====
+
+2026/06/03 16:44:54 [testPwd] Testing printing current working directory, 1.00
+2026/06/03 16:44:54 Sending command to SSI: 
+pwd 
+
+2026/06/03 16:44:54 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > pwd 
+/home/bidhanmainali/CSC360/p1
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > 
+2026/06/03 16:44:54 pwd should output: 
+/home/bidhanmainali/CSC360/p1
+2026/06/03 16:44:54 Do you want to award mark for this test? (y/n or input a floating number between [0, 1.00]): 
+2026/06/03 16:44:55 Mark received: y
+2026/06/03 16:44:55 ==== Test name: testPwd, Mark received: 1.00 ====
+
+2026/06/03 16:44:56 [testChangeRelativeDir] Testing changing relative directory, 1.00
+2026/06/03 16:44:56 Sending command to SSI: 
+cd ./temp
+pwd
+
+2026/06/03 16:44:56 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > cd ./temp
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1/temp > pwd
+/home/bidhanmainali/CSC360/p1/temp
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1/temp > 
+2026/06/03 16:44:56 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.25]): 
+2026/06/03 16:44:56 Mark received: y
+2026/06/03 16:44:56 Sending command to SSI: 
+cd ./A
+pwd
+
+2026/06/03 16:44:56 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1/temp > cd ./A
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1/temp/A > pwd
+/home/bidhanmainali/CSC360/p1/temp/A
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1/temp/A > 
+2026/06/03 16:44:56 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.25]): 
+2026/06/03 16:44:57 Mark received: y
+2026/06/03 16:44:57 Sending command to SSI: 
+cd ../..
+pwd
+
+2026/06/03 16:44:57 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1/temp/A/C > cd ../..
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1/temp > pwd
+/home/bidhanmainali/CSC360/p1/temp
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1/temp > 
+2026/06/03 16:44:57 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.25]): 
+2026/06/03 16:44:57 Mark received: y
+2026/06/03 16:44:57 Sending command to SSI: 
+cd ./D/../..
+pwd
+
+2026/06/03 16:44:57 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1/temp/A/C > cd ./D/../..
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1/temp/A > pwd
+/home/bidhanmainali/CSC360/p1/temp/A
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1/temp/A > 
+2026/06/03 16:44:57 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.25]): 
+2026/06/03 16:44:58 Mark received: y
+2026/06/03 16:44:58 ==== Test name: testChangeRelativeDir, Mark received: 1.00 ====
+
+2026/06/03 16:44:59 [testChangeAbsDir] Testing changing absolute directory, 1.00
+2026/06/03 16:44:59 Sending command to SSI: 
+cd /tmp
+pwd
+
+2026/06/03 16:44:59 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > cd /tmp
+bidhanmainali@linux202: /tmp > pwd
+/tmp
+bidhanmainali@linux202: /tmp > 
+2026/06/03 16:44:59 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:45:00 Mark received: y
+2026/06/03 16:45:00 Sending command to SSI: 
+cd /tmp/../tmp/../tmp/
+pwd
+
+2026/06/03 16:45:00 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > cd /tmp/../tmp/../tmp/
+bidhanmainali@linux202: /tmp > pwd
+/tmp
+bidhanmainali@linux202: /tmp > 
+2026/06/03 16:45:00 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:45:00 Mark received: y
+2026/06/03 16:45:00 Sending command to SSI: 
+cd /
+pwd
+
+2026/06/03 16:45:00 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > cd /
+bidhanmainali@linux202: / > pwd
+/
+bidhanmainali@linux202: / > 
+2026/06/03 16:45:00 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:45:01 Mark received: y
+2026/06/03 16:45:01 Sending command to SSI: 
+cd /.././
+pwd
+
+2026/06/03 16:45:01 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > cd /.././
+bidhanmainali@linux202: / > pwd
+/
+bidhanmainali@linux202: / > 
+2026/06/03 16:45:01 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:45:01 Mark received: y
+2026/06/03 16:45:01 Sending command to SSI: 
+cd /tmp/nonexisit/
+pwd
+
+2026/06/03 16:45:01 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > cd /tmp/nonexisit/
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > pwd
+/home/bidhanmainali/CSC360/p1
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > 
+2026/06/03 16:45:01 ssi: cd: /tmp/nonexisit/: No such file or directory
+
+2026/06/03 16:45:01 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:45:02 Mark received: y
+2026/06/03 16:45:02 ==== Test name: testChangeAbsDir, Mark received: 1.00 ====
+
+2026/06/03 16:45:03 [testChangeHomeDir] Testing changing home directory, 1.00
+2026/06/03 16:45:03 Sending command to SSI: 
+cd /tmp
+pwd
+
+2026/06/03 16:45:03 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > cd /tmp
+bidhanmainali@linux202: /tmp > pwd
+/tmp
+bidhanmainali@linux202: /tmp > 
+2026/06/03 16:45:03 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:45:04 Mark received: y
+2026/06/03 16:45:04 Sending command to SSI: 
+cd ~
+pwd
+
+2026/06/03 16:45:04 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > cd ~
+bidhanmainali@linux202: /home/bidhanmainali > pwd
+/home/bidhanmainali
+bidhanmainali@linux202: /home/bidhanmainali > 
+2026/06/03 16:45:04 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:45:05 Mark received: y
+2026/06/03 16:45:05 Sending command to SSI: 
+cd ~/
+pwd
+
+2026/06/03 16:45:05 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > cd ~/
+bidhanmainali@linux202: /home/bidhanmainali > pwd
+/home/bidhanmainali
+bidhanmainali@linux202: /home/bidhanmainali > 
+2026/06/03 16:45:05 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:45:06 Mark received: y
+2026/06/03 16:45:06 Sending command to SSI: 
+cd ~/../../
+pwd
+
+2026/06/03 16:45:06 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > cd ~/../../
+bidhanmainali@linux202: / > pwd
+/
+bidhanmainali@linux202: / > 
+2026/06/03 16:45:06 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:45:06 Mark received: y
+2026/06/03 16:45:06 Sending command to SSI: 
+cd 
+pwd
+
+2026/06/03 16:45:06 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > cd 
+bidhanmainali@linux202: /home/bidhanmainali > pwd
+/home/bidhanmainali
+bidhanmainali@linux202: /home/bidhanmainali > 
+2026/06/03 16:45:06 Do you want to award mark for this test? (y/n or input a floating number between [0, 0.20]): 
+2026/06/03 16:45:07 Mark received: y
+2026/06/03 16:45:07 ==== Test name: testChangeHomeDir, Mark received: 1.00 ====
+
+2026/06/03 16:45:08 [testPromptCorrect] Testing prompt is correct, 1.00
+2026/06/03 16:45:08 Among all the above changing directory tests, does the prompt always show the correct cwd after each `cd` command?
+2026/06/03 16:45:08 Do you want to award mark for this test? (y/n or input a floating number between [0, 1.00]): 
+2026/06/03 16:45:09 Mark received: y
+2026/06/03 16:45:09 ==== Test name: testPromptCorrect, Mark received: 1.00 ====
+
+2026/06/03 16:45:10 [testBgPing] Testing `bg` command with `ping`, 5.00
+2026/06/03 16:45:10 Please wait for around 15 seconds
+2026/06/03 16:45:10 [COMMAND]: /home/bidhanmainali/CSC360/p1/ssi
+2026/06/03 16:45:10 Sending command to SSI: bg ping -c 5 1.1.1.1
+2026/06/03 16:45:10 Sending command to SSI: bg ping -c 10 8.8.8.8
+2026/06/03 16:45:10 Sending command to SSI: bglist  
+2026/06/03 16:45:10 Sending command to SSI: sleep 5 
+2026/06/03 16:45:10 Sending command to SSI: bglist  
+2026/06/03 16:45:10 Sending command to SSI: sleep 5 
+2026/06/03 16:45:10 Sending command to SSI: bglist  
+2026/06/03 16:45:20 bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > bg ping -c 5 1.1.1.1
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > bg ping -c 10 8.8.8.8
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > bglist  
+3272011: ping -c 10 8.8.8.8
+3272010: ping -c 5 1.1.1.1
+Total Background jobs: 2
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > sleep 5 
+PING 1.1.1.1 (1.1.1.1) 56(84) bytes of data.
+64 bytes from 1.1.1.1: icmp_seq=1 ttl=53 time=3.28 ms
+PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.
+64 bytes from 8.8.8.8: icmp_seq=1 ttl=111 time=6.86 ms
+64 bytes from 1.1.1.1: icmp_seq=2 ttl=53 time=3.16 ms
+64 bytes from 8.8.8.8: icmp_seq=2 ttl=111 time=6.57 ms
+64 bytes from 1.1.1.1: icmp_seq=3 ttl=53 time=3.24 ms
+64 bytes from 8.8.8.8: icmp_seq=3 ttl=111 time=6.64 ms
+64 bytes from 1.1.1.1: icmp_seq=4 ttl=53 time=3.28 ms
+64 bytes from 8.8.8.8: icmp_seq=4 ttl=111 time=6.70 ms
+64 bytes from 1.1.1.1: icmp_seq=5 ttl=53 time=3.25 ms
+
+--- 1.1.1.1 ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss, time 4006ms
+rtt min/avg/max/mdev = 3.156/3.240/3.284/0.045 ms
+64 bytes from 8.8.8.8: icmp_seq=5 ttl=111 time=6.68 ms
+3272010: ping -c 5 1.1.1.1 has terminated.
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > bglist  
+3272011: ping -c 10 8.8.8.8
+Total Background jobs: 1
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > sleep 5 
+64 bytes from 8.8.8.8: icmp_seq=6 ttl=111 time=6.86 ms
+64 bytes from 8.8.8.8: icmp_seq=7 ttl=111 time=6.84 ms
+64 bytes from 8.8.8.8: icmp_seq=8 ttl=111 time=6.61 ms
+64 bytes from 8.8.8.8: icmp_seq=9 ttl=111 time=6.79 ms
+64 bytes from 8.8.8.8: icmp_seq=10 ttl=111 time=6.87 ms
+
+--- 8.8.8.8 ping statistics ---
+10 packets transmitted, 10 received, 0% packet loss, time 9016ms
+rtt min/avg/max/mdev = 6.568/6.741/6.866/0.108 ms
+3272011: ping -c 10 8.8.8.8 has terminated.
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > bglist  
+Total Background jobs: 0
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > 
+2026/06/03 16:45:20 Do you want to award mark for this test? (y/n or input a floating number between [0, 5.00]): 
+2026/06/03 16:45:22 Mark received: y
+2026/06/03 16:45:22 ==== Test name: testBgPing, Mark received: 5.00 ====
+
+2026/06/03 16:45:23 
+==== Final Grade: 15.000000====
+g -c 10 8.8.8.8
+3266304: ping -c 5 1.1.1.1
+Total Background jobs: 2
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > sleep 5 
+PING 1.1.1.1 (1.1.1.1) 56(84) bytes of data.
+64 bytes from 1.1.1.1: icmp_seq=1 ttl=53 time=3.20 ms
+PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.
+64 bytes from 8.8.8.8: icmp_seq=1 ttl=111 time=6.87 ms
+64 bytes from 1.1.1.1: icmp_seq=2 ttl=53 time=3.08 ms
+64 bytes from 8.8.8.8: icmp_seq=2 ttl=111 time=6.70 ms
+64 bytes from 1.1.1.1: icmp_seq=3 ttl=53 time=3.17 ms
+64 bytes from 8.8.8.8: icmp_seq=3 ttl=111 time=6.78 ms
+64 bytes from 1.1.1.1: icmp_seq=4 ttl=53 time=3.18 ms
+64 bytes from 8.8.8.8: icmp_seq=4 ttl=111 time=6.74 ms
+64 bytes from 1.1.1.1: icmp_seq=5 ttl=53 time=3.31 ms
+
+--- 1.1.1.1 ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss, time 4005ms
+rtt min/avg/max/mdev = 3.077/3.185/3.305/0.073 ms
+64 bytes from 8.8.8.8: icmp_seq=5 ttl=111 time=6.73 ms
+3266304: ping -c 5 1.1.1.1 has terminated.
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > bglist  
+3266305: ping -c 10 8.8.8.8
+Total Background jobs: 1
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > sleep 5 
+64 bytes from 8.8.8.8: icmp_seq=6 ttl=111 time=6.78 ms
+64 bytes from 8.8.8.8: icmp_seq=7 ttl=111 time=6.80 ms
+64 bytes from 8.8.8.8: icmp_seq=8 ttl=111 time=6.87 ms
+64 bytes from 8.8.8.8: icmp_seq=9 ttl=111 time=6.55 ms
+64 bytes from 8.8.8.8: icmp_seq=10 ttl=111 time=6.81 ms
+
+--- 8.8.8.8 ping statistics ---
+10 packets transmitted, 10 received, 0% packet loss, time 9017ms
+rtt min/avg/max/mdev = 6.547/6.762/6.873/0.089 ms
+3266305: ping -c 10 8.8.8.8 has terminated.
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > bglist  
+Total Background jobs: 0
+bidhanmainali@linux202: /home/bidhanmainali/CSC360/p1 > 
+2026/06/03 15:47:22 Do you want to award mark for this test? (y/n or input a floating number between [0, 5.00]): 
+2026/06/03 15:47:22 Mark received: y
+2026/06/03 15:47:22 ==== Test name: testBgPing, Mark received: 5.00 ====
+
+2026/06/03 15:47:23 
+==== Final Grade: 15.000000====
