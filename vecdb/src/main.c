@@ -19,6 +19,7 @@ static void usage(FILE *out, const char *prog) {
         "  open   <file.vdb>         check that a store opens and is valid\n"
         "  embed  \"<text>\" [dim]      embed text and print a vector summary\n"
         "  add    <file.vdb> \"<text>\" embed text and add it to a store\n"
+        "  search <file.vdb> \"<q>\" [k] find the k most similar entries\n"
         "  help                      show this message\n"
         "  version                   show the version\n",
         prog, VDB_DEFAULT_DIM);
@@ -188,6 +189,103 @@ static int cmd_add(int argc, char **argv) {
     return 0;
 }
 
+/* One scored search result: a similarity score and the record it refers to. */
+typedef struct {
+    float    score;
+    uint32_t index;
+} Hit;
+
+static int cmd_search(int argc, char **argv) {
+    VdbData     data;
+    const char *path;
+    const char *query;
+    uint32_t    k = 5;
+    float      *qv;
+    Hit        *hits;
+    uint32_t    dim;
+    uint32_t    nhits = 0;
+    uint32_t    i;
+
+    if (argc < 2) {
+        fprintf(stderr, "vecdb search: usage: search <file.vdb> \"<query>\" [k]\n");
+        return 1;
+    }
+    path  = argv[0];
+    query = argv[1];
+
+    if (argc >= 3) {
+        long v = strtol(argv[2], NULL, 10);
+        if (v <= 0) {
+            fprintf(stderr, "vecdb search: k must be a positive integer\n");
+            return 1;
+        }
+        k = (uint32_t)v;
+    }
+
+    if (vdb_load(path, &data) != 0) {
+        return 1;
+    }
+
+    if (data.count == 0) {
+        printf("Store '%s' is empty.\n", path);
+        vdb_data_free(&data);
+        return 0;
+    }
+
+    dim  = data.hdr.dim;
+    qv   = malloc((size_t)dim * sizeof(float));
+    hits = malloc((size_t)k * sizeof(Hit));
+    if (qv == NULL || hits == NULL) {
+        fprintf(stderr, "vecdb search: out of memory\n");
+        free(qv);
+        free(hits);
+        vdb_data_free(&data);
+        return 1;
+    }
+
+    embed_tf(query, qv, dim, data.hdr.hash_seed);
+
+    /* Score every vector; keep the best k in a small array sorted by
+       descending score (hits[0] is the best, hits[nhits-1] the weakest kept). */
+    for (i = 0; i < data.count; i++) {
+        const float *vv    = data.vectors + (size_t)i * dim;
+        float        score = 0.0f;
+        uint32_t     j;
+        int          pos;
+
+        for (j = 0; j < dim; j++) {
+            score += qv[j] * vv[j];
+        }
+
+        if (nhits < k) {
+            pos = (int)nhits;
+            nhits++;
+        } else if (score > hits[nhits - 1].score) {
+            pos = (int)nhits - 1;   /* displace the weakest kept result */
+        } else {
+            continue;
+        }
+
+        while (pos > 0 && hits[pos - 1].score < score) {
+            hits[pos] = hits[pos - 1];
+            pos--;
+        }
+        hits[pos].score = score;
+        hits[pos].index = i;
+    }
+
+    printf("Query: \"%s\"\n", query);
+    printf("Top %u of %u:\n", nhits, data.count);
+    for (i = 0; i < nhits; i++) {
+        printf("  %.4f  %s\n", hits[i].score, data.payloads[hits[i].index]);
+    }
+
+    free(qv);
+    free(hits);
+    vdb_data_free(&data);
+    return 0;
+}
+
 int main(int argc, char **argv) {
     const char *cmd;
 
@@ -212,6 +310,9 @@ int main(int argc, char **argv) {
     }
     if (strcmp(cmd, "add") == 0) {
         return cmd_add(argc - 2, argv + 2);
+    }
+    if (strcmp(cmd, "search") == 0) {
+        return cmd_search(argc - 2, argv + 2);
     }
     if (strcmp(cmd, "help") == 0) {
         usage(stdout, argv[0]);
