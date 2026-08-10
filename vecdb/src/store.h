@@ -60,6 +60,7 @@ typedef struct {
     VdbHeader hdr;
     float    *vectors;   /* count * dim floats, row-major        */
     char    **payloads;  /* count NUL-terminated strings          */
+    float    *idf;       /* dim IDF weights, or NULL if not built  */
     uint32_t  count;     /* number of records in use              */
     uint32_t  cap;       /* allocated capacity, in records        */
 } VdbData;

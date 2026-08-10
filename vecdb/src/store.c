@@ -269,6 +269,7 @@ void vdb_data_free(VdbData *data) {
     }
     free(data->payloads);
     free(data->vectors);
+    free(data->idf);
     memset(data, 0, sizeof(*data));
 }
 
@@ -292,8 +293,13 @@ int vdb_write(const char *path, VdbData *data) {
     data->hdr.payload_size = payload_size;
     data->hdr.idmap_off    = 0;
     data->hdr.idmap_size   = 0;
-    data->hdr.idf_off      = 0;
-    data->hdr.idf_size     = 0;
+    if (data->idf != NULL) {
+        data->hdr.idf_off  = data->hdr.payload_off + payload_size;
+        data->hdr.idf_size = (uint64_t)dim * sizeof(float);
+    } else {
+        data->hdr.idf_off  = 0;
+        data->hdr.idf_size = 0;
+    }
 
     fp = fopen(path, "wb");
     if (fp == NULL) {
@@ -329,6 +335,15 @@ int vdb_write(const char *path, VdbData *data) {
         if (fwrite(lenbuf, 1, 4, fp) != 4 ||
             (len > 0 && fwrite(data->payloads[i], 1, len, fp) != len)) {
             fprintf(stderr, "vecdb: failed to write payload to '%s'\n", path);
+            fclose(fp);
+            return -1;
+        }
+    }
+
+    /* IDF weights: dim raw float32 values, present once the index is built. */
+    if (data->idf != NULL) {
+        if (fwrite(data->idf, sizeof(float), dim, fp) != dim) {
+            fprintf(stderr, "vecdb: failed to write idf to '%s'\n", path);
             fclose(fp);
             return -1;
         }
@@ -440,6 +455,23 @@ int vdb_load(const char *path, VdbData *data) {
 
         s[len] = '\0';
         data->payloads[i] = s;
+    }
+
+    /* IDF weights follow the payloads, if the index has been built. */
+    if (data->hdr.idf_size == (uint64_t)dim * sizeof(float)) {
+        data->idf = malloc((size_t)dim * sizeof(float));
+        if (data->idf == NULL) {
+            fprintf(stderr, "vecdb: out of memory loading '%s'\n", path);
+            vdb_data_free(data);
+            fclose(fp);
+            return -1;
+        }
+        if (fread(data->idf, sizeof(float), dim, fp) != dim) {
+            fprintf(stderr, "vecdb: truncated idf in '%s'\n", path);
+            vdb_data_free(data);
+            fclose(fp);
+            return -1;
+        }
     }
 
     fclose(fp);
