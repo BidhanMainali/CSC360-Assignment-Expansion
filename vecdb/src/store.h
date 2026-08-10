@@ -98,4 +98,9 @@ void vdb_data_free(VdbData *data);
    failure. */
 int vdb_write(const char *path, VdbData *data);
 
+/* Load an entire dataset from `path` into `data`. On success `data` owns the
+   vectors and payloads and must be released with vdb_data_free. Returns 0 on
+   success, -1 on failure. */
+int vdb_load(const char *path, VdbData *data);
+
 #endif /* VECDB_STORE_H */

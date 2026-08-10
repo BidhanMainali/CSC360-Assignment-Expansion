@@ -341,3 +341,107 @@ int vdb_write(const char *path, VdbData *data) {
 
     return 0;
 }
+
+int vdb_load(const char *path, VdbData *data) {
+    FILE    *fp;
+    uint8_t  hdrbuf[VDB_HEADER_SIZE];
+    uint32_t dim;
+    uint32_t count;
+    uint32_t i;
+    size_t   nfloats;
+
+    memset(data, 0, sizeof(*data));
+
+    fp = fopen(path, "rb");
+    if (fp == NULL) {
+        fprintf(stderr, "vecdb: cannot open '%s'\n", path);
+        return -1;
+    }
+
+    if (fread(hdrbuf, 1, VDB_HEADER_SIZE, fp) != VDB_HEADER_SIZE) {
+        fprintf(stderr, "vecdb: '%s' is too small to be a vecdb file\n", path);
+        fclose(fp);
+        return -1;
+    }
+
+    if (decode_header(hdrbuf, &data->hdr) != 0) {
+        fprintf(stderr, "vecdb: '%s' is not a valid vecdb file\n", path);
+        fclose(fp);
+        return -1;
+    }
+
+    if (data->hdr.version != VDB_VERSION) {
+        fprintf(stderr, "vecdb: unsupported version %u in '%s'\n",
+                data->hdr.version, path);
+        fclose(fp);
+        return -1;
+    }
+
+    dim   = data->hdr.dim;
+    count = data->hdr.count;
+
+    if (count == 0) {
+        fclose(fp);
+        return 0;   /* empty store: nothing more to read */
+    }
+
+    nfloats        = (size_t)count * dim;
+    data->vectors  = malloc(nfloats * sizeof(float));
+    data->payloads = malloc((size_t)count * sizeof(char *));
+
+    if (data->vectors == NULL || data->payloads == NULL) {
+        fprintf(stderr, "vecdb: out of memory loading '%s'\n", path);
+        vdb_data_free(data);
+        fclose(fp);
+        return -1;
+    }
+
+    /* Zero the payload slots so vdb_data_free stays safe if a later read
+       fails and only some payloads have been allocated. */
+    memset(data->payloads, 0, (size_t)count * sizeof(char *));
+    data->count = count;
+    data->cap   = count;
+
+    if (fread(data->vectors, sizeof(float), nfloats, fp) != nfloats) {
+        fprintf(stderr, "vecdb: truncated vectors in '%s'\n", path);
+        vdb_data_free(data);
+        fclose(fp);
+        return -1;
+    }
+
+    for (i = 0; i < count; i++) {
+        uint8_t  lenbuf[4];
+        uint32_t len;
+        char    *s;
+
+        if (fread(lenbuf, 1, 4, fp) != 4) {
+            fprintf(stderr, "vecdb: truncated payload in '%s'\n", path);
+            vdb_data_free(data);
+            fclose(fp);
+            return -1;
+        }
+        len = get_be32(lenbuf);
+
+        s = malloc((size_t)len + 1);
+        if (s == NULL) {
+            fprintf(stderr, "vecdb: out of memory loading '%s'\n", path);
+            vdb_data_free(data);
+            fclose(fp);
+            return -1;
+        }
+
+        if (len > 0 && fread(s, 1, len, fp) != len) {
+            fprintf(stderr, "vecdb: truncated payload in '%s'\n", path);
+            free(s);
+            vdb_data_free(data);
+            fclose(fp);
+            return -1;
+        }
+
+        s[len] = '\0';
+        data->payloads[i] = s;
+    }
+
+    fclose(fp);
+    return 0;
+}
