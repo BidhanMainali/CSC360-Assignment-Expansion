@@ -7,8 +7,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
+#include <setjmp.h>
 #include <readline/readline.h>
 #include <readline/history.h>
+
+/* Jump target used to abort the current input line on Ctrl-C and return to a
+   fresh prompt instead of terminating the session. `in_readline` gates the
+   jump so a signal that arrives while a command is running is ignored. */
+static sigjmp_buf            ctrlc_env;
+static volatile sig_atomic_t in_readline = 0;
+
+static void on_sigint(int sig) {
+    (void)sig;
+    if (in_readline) {
+        siglongjmp(ctrlc_env, 1);
+    }
+}
 
 static void print_help(void) {
     printf("Commands:\n"
@@ -37,11 +52,28 @@ int repl_run(const char *path) {
            path, data.count, data.hdr.dim);
     printf("Type 'help' for commands, 'quit' or Ctrl-D to exit.\n");
 
-    while ((line = readline(prompt)) != NULL) {
-        char *cmd = line;
+    signal(SIGINT, on_sigint);
+
+    while (1) {
+        char *cmd;
         char *word;
         char *arg;
 
+        /* Ctrl-C during readline jumps back here: drop the line and re-prompt. */
+        if (sigsetjmp(ctrlc_env, 1) != 0) {
+            in_readline = 0;
+            printf("\n");
+        }
+
+        in_readline = 1;
+        line = readline(prompt);
+        in_readline = 0;
+
+        if (line == NULL) {   /* EOF (Ctrl-D) */
+            break;
+        }
+
+        cmd = line;
         while (*cmd == ' ' || *cmd == '\t') {
             cmd++;
         }
