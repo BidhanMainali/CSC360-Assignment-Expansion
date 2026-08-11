@@ -1,6 +1,8 @@
 #include "repl.h"
 #include "store.h"
 #include "search.h"
+#include "embed.h"
+#include "index.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,6 +26,7 @@ int repl_run(const char *path) {
     char     prompt[256];
     char    *line;
     uint32_t k = 5;
+    int      dirty = 0;
 
     if (vdb_load(path, &data) != 0) {
         return 1;
@@ -108,11 +111,51 @@ int repl_run(const char *path) {
                     free(hits);
                 }
             }
+        } else if (strcmp(word, "add") == 0) {
+            if (*arg == '\0') {
+                printf("Usage: add <text...>\n");
+            } else {
+                float *vec = malloc((size_t)data.hdr.dim * sizeof(float));
+
+                if (vec == NULL) {
+                    printf("Out of memory.\n");
+                } else {
+                    embed_tf(arg, vec, data.hdr.dim, data.hdr.hash_seed);
+
+                    if (vdb_data_add(&data, vec, arg) != 0) {
+                        printf("Out of memory.\n");
+                    } else if (vdb_build_index(&data) != 0) {
+                        printf("Out of memory building index.\n");
+                    } else {
+                        dirty = 1;
+                        printf("Added (now %u vectors).\n", data.count);
+                    }
+                    free(vec);
+                }
+            }
+        } else if (strcmp(word, "save") == 0) {
+            if (!dirty) {
+                printf("No changes to save.\n");
+            } else if (vdb_write(path, &data) != 0) {
+                printf("Save failed.\n");
+            } else {
+                dirty = 0;
+                printf("Saved '%s'.\n", path);
+            }
         } else {
             printf("Unknown command. Type 'help'.\n");
         }
 
         free(line);
+    }
+
+    /* Persist interactive changes on the way out (quit or Ctrl-D). */
+    if (dirty) {
+        if (vdb_write(path, &data) == 0) {
+            printf("Saved changes to '%s'.\n", path);
+        } else {
+            fprintf(stderr, "vecdb: failed to save '%s'\n", path);
+        }
     }
 
     vdb_data_free(&data);
