@@ -2,6 +2,7 @@
 #include "embed.h"
 #include "index.h"
 #include "repl.h"
+#include "search.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -199,20 +200,12 @@ static int cmd_add(int argc, char **argv) {
     return 0;
 }
 
-/* One scored search result: a similarity score and the record it refers to. */
-typedef struct {
-    float    score;
-    uint32_t index;
-} Hit;
-
 static int cmd_search(int argc, char **argv) {
     VdbData     data;
     const char *path;
     const char *query;
     uint32_t    k = 5;
-    float      *qv;
     Hit        *hits;
-    uint32_t    dim;
     uint32_t    nhits = 0;
     uint32_t    i;
 
@@ -242,46 +235,18 @@ static int cmd_search(int argc, char **argv) {
         return 0;
     }
 
-    dim  = data.hdr.dim;
-    qv   = malloc((size_t)dim * sizeof(float));
     hits = malloc((size_t)k * sizeof(Hit));
-    if (qv == NULL || hits == NULL) {
+    if (hits == NULL) {
         fprintf(stderr, "vecdb search: out of memory\n");
-        free(qv);
-        free(hits);
         vdb_data_free(&data);
         return 1;
     }
 
-    embed_tfidf(query, qv, dim, data.hdr.hash_seed, data.idf);
-
-    /* Score every vector; keep the best k in a small array sorted by
-       descending score (hits[0] is the best, hits[nhits-1] the weakest kept). */
-    for (i = 0; i < data.count; i++) {
-        const float *vv    = data.vectors + (size_t)i * dim;
-        float        score = 0.0f;
-        uint32_t     j;
-        int          pos;
-
-        for (j = 0; j < dim; j++) {
-            score += qv[j] * vv[j];
-        }
-
-        if (nhits < k) {
-            pos = (int)nhits;
-            nhits++;
-        } else if (score > hits[nhits - 1].score) {
-            pos = (int)nhits - 1;   /* displace the weakest kept result */
-        } else {
-            continue;
-        }
-
-        while (pos > 0 && hits[pos - 1].score < score) {
-            hits[pos] = hits[pos - 1];
-            pos--;
-        }
-        hits[pos].score = score;
-        hits[pos].index = i;
+    if (vdb_search(&data, query, k, hits, &nhits) != 0) {
+        fprintf(stderr, "vecdb search: out of memory\n");
+        free(hits);
+        vdb_data_free(&data);
+        return 1;
     }
 
     printf("Query: \"%s\"\n", query);
@@ -290,7 +255,6 @@ static int cmd_search(int argc, char **argv) {
         printf("  %.4f  %s\n", hits[i].score, data.payloads[hits[i].index]);
     }
 
-    free(qv);
     free(hits);
     vdb_data_free(&data);
     return 0;
