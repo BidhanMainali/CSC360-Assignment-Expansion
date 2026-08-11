@@ -14,14 +14,14 @@ systems).
 
 ## Status
 
-Current release: **v0.2.0** — single-threaded vector store with TF-IDF ranking.
+Current release: **v0.3.0** — interactive REPL on top of the TF-IDF store.
 
 - [x] M0  on-disk `.vdb` format, `create` / `open` / `stats`
 - [x] M1  hashed term-frequency embedder, `embed`
 - [x] M2  single-threaded flat (exact) search: `add`, `search`, `addfile`
 - [x]     IDF weighting (TF -> TF-IDF)
+- [x] M4  interactive REPL: add / search / save, Ctrl-C, auto-save
 - [ ] M3  memory-mapped vector loads
-- [ ] M4  interactive REPL, background ingest, Ctrl-C
 - [ ] M5  multithreaded search + benchmarks
 
 ## Build
@@ -42,6 +42,17 @@ Developed and tested on Linux.
 ./vecdb search  store.vdb "a query" 5   # print the 5 most similar entries
 ./vecdb stats   store.vdb               # show information about the store
 ./vecdb embed   "some text" 16          # inspect the raw embedding vector
+./vecdb repl    store.vdb               # interactive session (add / search / save)
+```
+
+Inside the interactive session:
+
+```
+vecdb(store.vdb)> add machine learning is fun
+vecdb(store.vdb)> search learning       # top-k results, no reload
+vecdb(store.vdb)> k 3                    # change the number of results
+vecdb(store.vdb)> save                   # write changes (also auto-saved on exit)
+vecdb(store.vdb)> quit
 ```
 
 You can inspect the raw file with a hex viewer:
@@ -67,5 +78,7 @@ src/
   store.c   on-disk .vdb format and in-memory dataset (load/write/add)
   embed.c   tokenizer and hashing TF / TF-IDF vectorizer
   index.c   computes IDF weights and re-embeds vectors as TF-IDF
+  search.c  cosine scoring and top-k ranking
+  repl.c    interactive session (readline, commands, Ctrl-C)
   util.c    error helpers, big-endian serialization, FNV-1a hash
 ```
