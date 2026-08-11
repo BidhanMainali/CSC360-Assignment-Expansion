@@ -1,5 +1,6 @@
 #include "repl.h"
 #include "store.h"
+#include "search.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +23,7 @@ int repl_run(const char *path) {
     VdbData  data;
     char     prompt[256];
     char    *line;
+    uint32_t k = 5;
 
     if (vdb_load(path, &data) != 0) {
         return 1;
@@ -34,6 +36,8 @@ int repl_run(const char *path) {
 
     while ((line = readline(prompt)) != NULL) {
         char *cmd = line;
+        char *word;
+        char *arg;
 
         while (*cmd == ' ' || *cmd == '\t') {
             cmd++;
@@ -46,16 +50,64 @@ int repl_run(const char *path) {
 
         add_history(cmd);
 
-        if (strcmp(cmd, "quit") == 0 || strcmp(cmd, "exit") == 0) {
+        /* Split the line into a command word and the rest-of-line argument. */
+        word = cmd;
+        arg  = cmd;
+        while (*arg != '\0' && *arg != ' ' && *arg != '\t') {
+            arg++;
+        }
+        if (*arg != '\0') {
+            *arg = '\0';
+            arg++;
+            while (*arg == ' ' || *arg == '\t') {
+                arg++;
+            }
+        }
+
+        if (strcmp(word, "quit") == 0 || strcmp(word, "exit") == 0) {
             free(line);
             break;
-        } else if (strcmp(cmd, "help") == 0) {
+        } else if (strcmp(word, "help") == 0) {
             print_help();
-        } else if (strcmp(cmd, "stats") == 0) {
+        } else if (strcmp(word, "stats") == 0) {
             printf("Store:      %s\n", path);
             printf("Vectors:    %u\n", data.count);
             printf("Dimension:  %u\n", data.hdr.dim);
             printf("IDF:        %s\n", data.idf != NULL ? "built" : "none");
+        } else if (strcmp(word, "k") == 0) {
+            long v = strtol(arg, NULL, 10);
+
+            if (v <= 0) {
+                printf("k must be a positive integer.\n");
+            } else {
+                k = (uint32_t)v;
+                printf("k = %u\n", k);
+            }
+        } else if (strcmp(word, "search") == 0) {
+            if (*arg == '\0') {
+                printf("Usage: search <query...>\n");
+            } else if (data.count == 0) {
+                printf("Store is empty.\n");
+            } else {
+                Hit     *hits  = malloc((size_t)k * sizeof(Hit));
+                uint32_t nhits = 0;
+
+                if (hits == NULL) {
+                    printf("Out of memory.\n");
+                } else if (vdb_search(&data, arg, k, hits, &nhits) != 0) {
+                    printf("Out of memory.\n");
+                    free(hits);
+                } else {
+                    uint32_t r;
+
+                    printf("Top %u of %u:\n", nhits, data.count);
+                    for (r = 0; r < nhits; r++) {
+                        printf("  %.4f  %s\n", hits[r].score,
+                               data.payloads[hits[r].index]);
+                    }
+                    free(hits);
+                }
+            }
         } else {
             printf("Unknown command. Type 'help'.\n");
         }
