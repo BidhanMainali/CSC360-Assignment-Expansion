@@ -26,7 +26,8 @@ static void usage(FILE *out, const char *prog) {
         "  search <file.vdb> \"<q>\" [k] [--threads N]  find similar entries\n"
         "  addfile <file.vdb> <text> add each paragraph of a text file\n"
         "  repl   <file.vdb>         open an interactive session\n"
-        "  bench  [count] [dim] [nq] [threads]  benchmark search speed\n"
+        "  bench  <file.vdb> [nq] [threads]       benchmark search on a store\n"
+        "  bench  --gen <count> <dim> [nq] [thr]  benchmark synthetic data\n"
         "  help                      show this message\n"
         "  version                   show the version\n",
         prog, VDB_DEFAULT_DIM);
@@ -448,54 +449,22 @@ static double now_seconds(void) {
     return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
 }
 
-static int cmd_bench(int argc, char **argv) {
-    const uint32_t k          = 5;
-    const char    *query      = "vector database benchmark query terms";
-    uint32_t       count      = 50000;
-    uint32_t       dim        = 256;
-    uint32_t       nqueries   = 200;
-    int            maxthreads = 8;
-    VdbData        data;
+/* Run the timing table over an already-populated dataset. */
+static void run_benchmark(VdbData *data, uint32_t nqueries, int maxthreads) {
+    const uint32_t k     = 5;
+    const char    *query = "vector database benchmark query terms";
     Hit           *hits;
-    size_t         total;
-    size_t         idx;
     double         base_time = 0.0;
     int            t;
 
-    if (argc >= 1) { long v = strtol(argv[0], NULL, 10); if (v > 0) count = (uint32_t)v; }
-    if (argc >= 2) { long v = strtol(argv[1], NULL, 10); if (v > 0) dim = (uint32_t)v; }
-    if (argc >= 3) { long v = strtol(argv[2], NULL, 10); if (v > 0) nqueries = (uint32_t)v; }
-    if (argc >= 4) { long v = strtol(argv[3], NULL, 10); if (v > 0) maxthreads = (int)v; }
-
-    /* Build a synthetic dataset in memory: random vectors, empty payloads. */
-    memset(&data, 0, sizeof(data));
-    data.hdr.dim        = dim;
-    data.hdr.hash_seed  = 0;
-    data.hdr.metric     = VDB_METRIC_COSINE;
-    data.hdr.index_type = VDB_INDEX_FLAT;
-    data.count = count;
-    data.cap   = count;
-
-    total         = (size_t)count * dim;
-    data.vectors  = malloc(total * sizeof(float));
-    data.payloads = calloc(count, sizeof(char *));
-    hits          = malloc((size_t)k * sizeof(Hit));
-
-    if (data.vectors == NULL || data.payloads == NULL || hits == NULL) {
-        fprintf(stderr, "vecdb bench: out of memory (try a smaller count/dim)\n");
-        free(data.vectors);
-        free(data.payloads);
-        free(hits);
-        return 1;
-    }
-
-    srand(12345u);
-    for (idx = 0; idx < total; idx++) {
-        data.vectors[idx] = (float)rand() / (float)RAND_MAX * 2.0f - 1.0f;
+    hits = malloc((size_t)k * sizeof(Hit));
+    if (hits == NULL) {
+        fprintf(stderr, "vecdb bench: out of memory\n");
+        return;
     }
 
     printf("Benchmark: %u vectors, dim %u, %u queries per run\n\n",
-           count, dim, nqueries);
+           data->count, data->hdr.dim, nqueries);
     printf("%-9s %-9s %-10s %-12s %s\n",
            "Threads", "Queries", "Time(s)", "QPS", "Speedup");
 
@@ -517,9 +486,9 @@ static int cmd_bench(int argc, char **argv) {
         t0 = now_seconds();
         for (q = 0; q < nqueries; q++) {
             if (pool != NULL) {
-                vdb_search_mt(&data, query, k, hits, &nh, pool);
+                vdb_search_mt(data, query, k, hits, &nh, pool);
             } else {
-                vdb_search(&data, query, k, hits, &nh);
+                vdb_search(data, query, k, hits, &nh);
             }
         }
         elapsed = now_seconds() - t0;
@@ -538,8 +507,80 @@ static int cmd_bench(int argc, char **argv) {
         }
     }
 
-    vdb_data_free(&data);
     free(hits);
+}
+
+/* Build a synthetic in-memory dataset of random vectors for benchmarking. */
+static int build_synthetic(VdbData *data, uint32_t count, uint32_t dim) {
+    size_t total = (size_t)count * dim;
+    size_t idx;
+
+    memset(data, 0, sizeof(*data));
+    data->hdr.dim        = dim;
+    data->hdr.metric     = VDB_METRIC_COSINE;
+    data->hdr.index_type = VDB_INDEX_FLAT;
+    data->count = count;
+    data->cap   = count;
+
+    data->vectors  = malloc(total * sizeof(float));
+    data->payloads = calloc(count, sizeof(char *));
+
+    if (data->vectors == NULL || data->payloads == NULL) {
+        free(data->vectors);
+        free(data->payloads);
+        return -1;
+    }
+
+    srand(12345u);
+    for (idx = 0; idx < total; idx++) {
+        data->vectors[idx] = (float)rand() / (float)RAND_MAX * 2.0f - 1.0f;
+    }
+
+    return 0;
+}
+
+static int cmd_bench(int argc, char **argv) {
+    VdbData  data;
+    uint32_t nqueries   = 200;
+    int      maxthreads = 8;
+
+    if (argc >= 1 && strcmp(argv[0], "--gen") == 0) {
+        /* Synthetic:  bench --gen <count> <dim> [nqueries] [threads] */
+        uint32_t count = 50000;
+        uint32_t dim   = 256;
+
+        if (argc >= 2) { long v = strtol(argv[1], NULL, 10); if (v > 0) count = (uint32_t)v; }
+        if (argc >= 3) { long v = strtol(argv[2], NULL, 10); if (v > 0) dim = (uint32_t)v; }
+        if (argc >= 4) { long v = strtol(argv[3], NULL, 10); if (v > 0) nqueries = (uint32_t)v; }
+        if (argc >= 5) { long v = strtol(argv[4], NULL, 10); if (v > 0) maxthreads = (int)v; }
+
+        if (build_synthetic(&data, count, dim) != 0) {
+            fprintf(stderr, "vecdb bench: out of memory (try a smaller count/dim)\n");
+            return 1;
+        }
+    } else if (argc >= 1) {
+        /* Real store:  bench <file.vdb> [nqueries] [threads] */
+        if (argc >= 2) { long v = strtol(argv[1], NULL, 10); if (v > 0) nqueries = (uint32_t)v; }
+        if (argc >= 3) { long v = strtol(argv[2], NULL, 10); if (v > 0) maxthreads = (int)v; }
+
+        if (vdb_load(argv[0], &data) != 0) {
+            return 1;
+        }
+        if (data.count == 0) {
+            printf("Store '%s' is empty; nothing to benchmark.\n", argv[0]);
+            vdb_data_free(&data);
+            return 0;
+        }
+    } else {
+        fprintf(stderr,
+            "vecdb bench: usage:\n"
+            "  bench <file.vdb> [nqueries] [threads]\n"
+            "  bench --gen <count> <dim> [nqueries] [threads]\n");
+        return 1;
+    }
+
+    run_benchmark(&data, nqueries, maxthreads);
+    vdb_data_free(&data);
     return 0;
 }
 
