@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define VECDB_VERSION_STRING "vecdb 0.1 (M0)"
 
@@ -25,6 +26,7 @@ static void usage(FILE *out, const char *prog) {
         "  search <file.vdb> \"<q>\" [k] [--threads N]  find similar entries\n"
         "  addfile <file.vdb> <text> add each paragraph of a text file\n"
         "  repl   <file.vdb>         open an interactive session\n"
+        "  bench  [count] [dim] [nq] [threads]  benchmark search speed\n"
         "  help                      show this message\n"
         "  version                   show the version\n",
         prog, VDB_DEFAULT_DIM);
@@ -439,6 +441,108 @@ static int cmd_addfile(int argc, char **argv) {
     return 0;
 }
 
+static double now_seconds(void) {
+    struct timespec ts;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+}
+
+static int cmd_bench(int argc, char **argv) {
+    const uint32_t k          = 5;
+    const char    *query      = "vector database benchmark query terms";
+    uint32_t       count      = 50000;
+    uint32_t       dim        = 256;
+    uint32_t       nqueries   = 200;
+    int            maxthreads = 8;
+    VdbData        data;
+    Hit           *hits;
+    size_t         total;
+    size_t         idx;
+    double         base_time = 0.0;
+    int            t;
+
+    if (argc >= 1) { long v = strtol(argv[0], NULL, 10); if (v > 0) count = (uint32_t)v; }
+    if (argc >= 2) { long v = strtol(argv[1], NULL, 10); if (v > 0) dim = (uint32_t)v; }
+    if (argc >= 3) { long v = strtol(argv[2], NULL, 10); if (v > 0) nqueries = (uint32_t)v; }
+    if (argc >= 4) { long v = strtol(argv[3], NULL, 10); if (v > 0) maxthreads = (int)v; }
+
+    /* Build a synthetic dataset in memory: random vectors, empty payloads. */
+    memset(&data, 0, sizeof(data));
+    data.hdr.dim        = dim;
+    data.hdr.hash_seed  = 0;
+    data.hdr.metric     = VDB_METRIC_COSINE;
+    data.hdr.index_type = VDB_INDEX_FLAT;
+    data.count = count;
+    data.cap   = count;
+
+    total         = (size_t)count * dim;
+    data.vectors  = malloc(total * sizeof(float));
+    data.payloads = calloc(count, sizeof(char *));
+    hits          = malloc((size_t)k * sizeof(Hit));
+
+    if (data.vectors == NULL || data.payloads == NULL || hits == NULL) {
+        fprintf(stderr, "vecdb bench: out of memory (try a smaller count/dim)\n");
+        free(data.vectors);
+        free(data.payloads);
+        free(hits);
+        return 1;
+    }
+
+    srand(12345u);
+    for (idx = 0; idx < total; idx++) {
+        data.vectors[idx] = (float)rand() / (float)RAND_MAX * 2.0f - 1.0f;
+    }
+
+    printf("Benchmark: %u vectors, dim %u, %u queries per run\n\n",
+           count, dim, nqueries);
+    printf("%-9s %-9s %-10s %-12s %s\n",
+           "Threads", "Queries", "Time(s)", "QPS", "Speedup");
+
+    for (t = 1; t <= maxthreads; t *= 2) {
+        ThreadPool *pool = NULL;
+        double      t0;
+        double      elapsed;
+        uint32_t    q;
+        uint32_t    nh;
+
+        if (t > 1) {
+            pool = pool_create(t);
+            if (pool == NULL) {
+                fprintf(stderr, "vecdb bench: could not create thread pool\n");
+                break;
+            }
+        }
+
+        t0 = now_seconds();
+        for (q = 0; q < nqueries; q++) {
+            if (pool != NULL) {
+                vdb_search_mt(&data, query, k, hits, &nh, pool);
+            } else {
+                vdb_search(&data, query, k, hits, &nh);
+            }
+        }
+        elapsed = now_seconds() - t0;
+
+        if (t == 1) {
+            base_time = elapsed;
+        }
+
+        printf("%-9d %-9u %-10.3f %-12.0f %.2fx\n",
+               t, nqueries, elapsed,
+               elapsed > 0.0 ? (double)nqueries / elapsed : 0.0,
+               elapsed > 0.0 ? base_time / elapsed : 0.0);
+
+        if (pool != NULL) {
+            pool_destroy(pool);
+        }
+    }
+
+    vdb_data_free(&data);
+    free(hits);
+    return 0;
+}
+
 int main(int argc, char **argv) {
     const char *cmd;
 
@@ -476,6 +580,9 @@ int main(int argc, char **argv) {
             return 1;
         }
         return repl_run(argv[2]);
+    }
+    if (strcmp(cmd, "bench") == 0) {
+        return cmd_bench(argc - 2, argv + 2);
     }
     if (strcmp(cmd, "help") == 0) {
         usage(stdout, argv[0]);
