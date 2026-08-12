@@ -40,8 +40,8 @@ int repl_run(const char *path) {
     VdbData  data;
     char     prompt[256];
     char    *line;
-    uint32_t k = 5;
-    int      dirty = 0;
+    volatile uint32_t k = 5;
+    volatile int      dirty = 0;
 
     if (vdb_load(path, &data) != 0) {
         return 1;
