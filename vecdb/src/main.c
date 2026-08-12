@@ -22,7 +22,7 @@ static void usage(FILE *out, const char *prog) {
         "  open   <file.vdb>         check that a store opens and is valid\n"
         "  embed  \"<text>\" [dim]      embed text and print a vector summary\n"
         "  add    <file.vdb> \"<text>\" embed text and add it to a store\n"
-        "  search <file.vdb> \"<q>\" [k] find the k most similar entries\n"
+        "  search <file.vdb> \"<q>\" [k] [--threads N]  find similar entries\n"
         "  addfile <file.vdb> <text> add each paragraph of a text file\n"
         "  repl   <file.vdb>         open an interactive session\n"
         "  help                      show this message\n"
@@ -205,24 +205,37 @@ static int cmd_search(int argc, char **argv) {
     const char *path;
     const char *query;
     uint32_t    k = 5;
+    int         nthreads = 1;
     Hit        *hits;
     uint32_t    nhits = 0;
     uint32_t    i;
+    int         ai;
+    int         rc;
 
     if (argc < 2) {
-        fprintf(stderr, "vecdb search: usage: search <file.vdb> \"<query>\" [k]\n");
+        fprintf(stderr,
+            "vecdb search: usage: search <file.vdb> \"<query>\" [k] [--threads N]\n");
         return 1;
     }
     path  = argv[0];
     query = argv[1];
 
-    if (argc >= 3) {
-        long v = strtol(argv[2], NULL, 10);
-        if (v <= 0) {
-            fprintf(stderr, "vecdb search: k must be a positive integer\n");
-            return 1;
+    /* Remaining args are an optional k and/or "--threads N", in any order. */
+    for (ai = 2; ai < argc; ai++) {
+        if (strcmp(argv[ai], "--threads") == 0 && ai + 1 < argc) {
+            nthreads = atoi(argv[ai + 1]);
+            ai++;
+        } else {
+            long v = strtol(argv[ai], NULL, 10);
+            if (v <= 0) {
+                fprintf(stderr, "vecdb search: k must be a positive integer\n");
+                return 1;
+            }
+            k = (uint32_t)v;
         }
-        k = (uint32_t)v;
+    }
+    if (nthreads < 1) {
+        nthreads = 1;
     }
 
     if (vdb_load(path, &data) != 0) {
@@ -242,7 +255,22 @@ static int cmd_search(int argc, char **argv) {
         return 1;
     }
 
-    if (vdb_search(&data, query, k, hits, &nhits) != 0) {
+    if (nthreads > 1) {
+        ThreadPool *pool = pool_create(nthreads);
+
+        if (pool == NULL) {
+            fprintf(stderr, "vecdb search: could not create thread pool\n");
+            free(hits);
+            vdb_data_free(&data);
+            return 1;
+        }
+        rc = vdb_search_mt(&data, query, k, hits, &nhits, pool);
+        pool_destroy(pool);
+    } else {
+        rc = vdb_search(&data, query, k, hits, &nhits);
+    }
+
+    if (rc != 0) {
         fprintf(stderr, "vecdb search: out of memory\n");
         free(hits);
         vdb_data_free(&data);
